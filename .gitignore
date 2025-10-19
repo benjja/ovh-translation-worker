@@ -1,3 +1,13 @@
+# Wrangler
+.wrangler/
+.dev.vars
+*.log
+
+# Secrets und lokale Konfiguration
+.env
+.env.local
+secrets.txt
+
 # Logs
 logs
 *.log
