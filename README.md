@@ -197,4 +197,3 @@ Bei Fragen oder Problemen:
 1. Prüfe die Cloudflare Worker Logs: Dashboard → Worker → Logs
 2. Teste die Health-API: `/api/health`
 3. Überprüfe die Secrets-Konfiguration
-   
