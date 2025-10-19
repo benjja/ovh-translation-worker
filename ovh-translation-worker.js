@@ -1,6 +1,6 @@
 /**
  * Cloudflare Worker: OVH Translation API Wrapper
- * Version 1.4 - Chunking Support für lange Texte
+ * Version 1.4 - Chunking Support + Clean UTF-8
  * Mit Basic Auth und eingebettetem HTML-Frontend
  */
 
@@ -9,7 +9,7 @@ const HTML_PAGE = `<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🌍 Übersetzungs-Tool</title>
+    <title>&#127757; &Uuml;bersetzungs-Tool</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -132,8 +132,8 @@ const HTML_PAGE = `<!DOCTYPE html>
 </head>
 <body>
     <div class="container">
-        <h1>🌍 Übersetzungs-Tool</h1>
-        <p class="subtitle">KI-gestützte Übersetzung mit OVH AI • Unterstützt lange Texte</p>
+        <h1>&#127757; &Uuml;bersetzungs-Tool</h1>
+        <p class="subtitle">KI-gest&uuml;tzte &Uuml;bersetzung mit OVH AI &bull; Unterst&uuml;tzt lange Texte</p>
 
         <div class="language-row">
             <div class="form-group">
@@ -141,14 +141,14 @@ const HTML_PAGE = `<!DOCTYPE html>
                 <select id="fromLang">
                     <option value="English">Englisch</option>
                     <option value="German">Deutsch</option>
-                    <option value="French">Französisch</option>
+                    <option value="French">Franz&ouml;sisch</option>
                     <option value="Spanish">Spanisch</option>
                 </select>
             </div>
             <div class="form-group">
                 <label for="toLang">Zu Sprache</label>
                 <select id="toLang">
-                    <option value="French">Französisch</option>
+                    <option value="French">Franz&ouml;sisch</option>
                     <option value="German">Deutsch</option>
                     <option value="English">Englisch</option>
                     <option value="Spanish">Spanisch</option>
@@ -157,24 +157,24 @@ const HTML_PAGE = `<!DOCTYPE html>
         </div>
 
         <div class="form-group">
-            <label for="textInput">Text zum Übersetzen</label>
+            <label for="textInput">Text zum &Uuml;bersetzen</label>
             <textarea id="textInput" placeholder="Gib hier deinen Text ein...">Brian is in the kitchen</textarea>
             <div class="char-counter" id="charCounter">0 Zeichen</div>
         </div>
 
-        <button type="button" class="button" id="translateBtn">Übersetzen</button>
+        <button type="button" class="button" id="translateBtn">&Uuml;bersetzen</button>
 
         <div id="progressContainer" class="progress-container hidden">
             <div class="progress-bar">
                 <div class="progress-fill" id="progressFill"></div>
             </div>
-            <div class="progress-text" id="progressText">Wird übersetzt...</div>
+            <div class="progress-text" id="progressText">Wird &uuml;bersetzt...</div>
         </div>
 
         <div id="result" class="hidden"></div>
         
         <div id="debugLog" class="result-box info hidden">
-            <h3>🔍 Debug-Log</h3>
+            <h3>&#128269; Debug-Log</h3>
             <details class="debug-section">
                 <summary>Klicken zum Anzeigen</summary>
                 <div id="debugContent"></div>
@@ -209,7 +209,7 @@ const HTML_PAGE = `<!DOCTYPE html>
             counter.textContent = length + ' Zeichen';
             if (length > 5000) {
                 counter.classList.add('warning');
-                counter.textContent += ' ⚠️ Sehr lang (wird in Teilen übersetzt)';
+                counter.textContent += ' \\u26A0\\uFE0F Sehr lang (wird in Teilen \\u00FCbersetzt)';
             } else {
                 counter.classList.remove('warning');
             }
@@ -223,7 +223,7 @@ const HTML_PAGE = `<!DOCTYPE html>
         }
 
         document.addEventListener('DOMContentLoaded', function() {
-            log('✅ Seite geladen');
+            log('\\u2705 Seite geladen');
             const btn = document.getElementById('translateBtn');
             const textInput = document.getElementById('textInput');
             if (btn) {
@@ -237,7 +237,7 @@ const HTML_PAGE = `<!DOCTYPE html>
         });
 
         async function translate() {
-            log('🔄 Übersetzung gestartet');
+            log('\\u{1F504} \\u00DCbersetzung gestartet');
             const btn = document.getElementById('translateBtn');
             const result = document.getElementById('result');
             const progressContainer = document.getElementById('progressContainer');
@@ -245,26 +245,26 @@ const HTML_PAGE = `<!DOCTYPE html>
             const fromLang = document.getElementById('fromLang').value;
             const toLang = document.getElementById('toLang').value;
 
-            log('Text-Länge: ' + text.length + ' Zeichen');
-            log('Von: ' + fromLang + ' → ' + toLang);
+            log('Text-L\\u00E4nge: ' + text.length + ' Zeichen');
+            log('Von: ' + fromLang + ' \\u2192 ' + toLang);
 
             result.classList.add('hidden');
             progressContainer.classList.remove('hidden');
             updateProgress(0, 'Wird vorbereitet...');
 
             if (!text.trim()) {
-                log('❌ Kein Text eingegeben');
+                log('\\u274C Kein Text eingegeben');
                 showResult('Bitte gib einen Text ein', 'error');
                 progressContainer.classList.add('hidden');
                 return;
             }
 
             btn.disabled = true;
-            btn.innerHTML = 'Wird übersetzt...<span class="spinner"></span>';
+            btn.innerHTML = 'Wird \\u00FCbersetzt...<span class="spinner"></span>';
             const startTime = Date.now();
 
             try {
-                log('📤 Sende Request an /api/translate');
+                log('\\u{1F4E4} Sende Request an /api/translate');
                 
                 const response = await fetch('/api/translate', {
                     method: 'POST',
@@ -273,51 +273,51 @@ const HTML_PAGE = `<!DOCTYPE html>
                 });
 
                 const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-                log('📥 Response erhalten (HTTP ' + response.status + ') nach ' + duration + 's');
+                log('\\u{1F4E5} Response erhalten (HTTP ' + response.status + ') nach ' + duration + 's');
 
                 let data;
                 try {
                     data = await response.json();
-                    log('✅ JSON erfolgreich geparst');
+                    log('\\u2705 JSON erfolgreich geparst');
                 } catch (parseError) {
-                    log('❌ JSON-Parse-Fehler: ' + parseError.message);
-                    throw new Error('Server hat ungültiges JSON zurückgegeben');
+                    log('\\u274C JSON-Parse-Fehler: ' + parseError.message);
+                    throw new Error('Server hat ung\\u00FCltiges JSON zur\\u00FCckgegeben');
                 }
 
                 if (response.ok && data.success) {
-                    log('✅ Übersetzung erfolgreich');
+                    log('\\u2705 \\u00DCbersetzung erfolgreich');
                     if (data.chunked) {
-                        log('ℹ️ Text wurde in ' + data.chunks + ' Teile aufgeteilt');
+                        log('\\u2139\\uFE0F Text wurde in ' + data.chunks + ' Teile aufgeteilt');
                     }
                     showResult(data.translated, 'success');
                 } else {
-                    log('❌ Übersetzung fehlgeschlagen: ' + (data.error || 'Unbekannt'));
-                    const errorMsg = data.error || data.detail || 'Übersetzung fehlgeschlagen';
+                    log('\\u274C \\u00DCbersetzung fehlgeschlagen: ' + (data.error || 'Unbekannt'));
+                    const errorMsg = data.error || data.detail || '\\u00DCbersetzung fehlgeschlagen';
                     showResult(errorMsg + '<br><br>Status: ' + response.status, 'error');
                 }
             } catch (error) {
                 const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-                log('❌ Exception nach ' + duration + 's: ' + error.message);
+                log('\\u274C Exception nach ' + duration + 's: ' + error.message);
                 showResult('Fehler: ' + error.message, 'error');
             } finally {
                 progressContainer.classList.add('hidden');
                 btn.disabled = false;
-                btn.innerHTML = 'Übersetzen';
-                log('✔️ Fertig');
+                btn.innerHTML = '\\u00DCbersetzen';
+                log('\\u2714\\uFE0F Fertig');
             }
         }
 
         function showResult(text, type) {
             const result = document.getElementById('result');
-            let icon = '✓';
-            let title = 'Übersetzung';
+            let icon = '\\u2713';
+            let title = '\\u00DCbersetzung';
             let textClass = 'result-text';
             if (type === 'error') {
-                icon = '❌';
+                icon = '\\u274C';
                 title = 'Fehler';
                 textClass = 'error-text';
             } else if (type === 'info') {
-                icon = 'ℹ️';
+                icon = '\\u2139\\uFE0F';
                 title = 'Hinweis';
             }
             result.className = 'result-box ' + type;
@@ -327,7 +327,7 @@ const HTML_PAGE = `<!DOCTYPE html>
                 result.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }, 100);
         }
-    </script>
+    <\/script>
 </body>
 </html>`;
 
@@ -335,18 +335,18 @@ const HTML_PAGE = `<!DOCTYPE html>
 function splitIntoChunks(text, maxChunkSize = 2000) {
     const chunks = [];
     
-    // Wenn Text klein genug ist, direkt zurückgeben
+    // Wenn Text klein genug ist, direkt zurÃ¼ckgeben
     if (text.length <= maxChunkSize) {
         return [text];
     }
 
-    // Text nach Absätzen aufteilen
+    // Text nach AbsÃ¤tzen aufteilen
     const paragraphs = text.split(/\n\n+/);
     
     let currentChunk = '';
     
     for (const paragraph of paragraphs) {
-        // Wenn der Absatz selbst zu groß ist, nach Sätzen aufteilen
+        // Wenn der Absatz selbst zu groÃŸ ist, nach SÃ¤tzen aufteilen
         if (paragraph.length > maxChunkSize) {
             // Aktuellen Chunk speichern, falls vorhanden
             if (currentChunk) {
@@ -354,7 +354,7 @@ function splitIntoChunks(text, maxChunkSize = 2000) {
                 currentChunk = '';
             }
             
-            // Absatz nach Sätzen aufteilen
+            // Absatz nach SÃ¤tzen aufteilen
             const sentences = paragraph.split(/([.!?]+\s+)/);
             
             for (const sentence of sentences) {
@@ -368,7 +368,7 @@ function splitIntoChunks(text, maxChunkSize = 2000) {
                 }
             }
         } else {
-            // Prüfen, ob Absatz in aktuellen Chunk passt
+            // PrÃ¼fen, ob Absatz in aktuellen Chunk passt
             if (currentChunk.length + paragraph.length + 2 <= maxChunkSize) {
                 currentChunk += (currentChunk ? '\n\n' : '') + paragraph;
             } else {
@@ -380,7 +380,7 @@ function splitIntoChunks(text, maxChunkSize = 2000) {
         }
     }
     
-    // Letzten Chunk hinzufügen
+    // Letzten Chunk hinzufÃ¼gen
     if (currentChunk) {
         chunks.push(currentChunk.trim());
     }
@@ -388,7 +388,7 @@ function splitIntoChunks(text, maxChunkSize = 2000) {
     return chunks;
 }
 
-// Einzelnen Chunk übersetzen
+// Einzelnen Chunk Ã¼bersetzen
 async function translateChunk(chunk, fromLang, targetLang, ovhToken) {
     const ovhUrl = `https://t5-large.endpoints.kepler.ai.cloud.ovh.net/api/translate?from=${encodeURIComponent(fromLang)}&target=${encodeURIComponent(targetLang)}`;
     
@@ -543,25 +543,25 @@ export default {
                 }
 
                 try {
-                    // Text in Chunks aufteilen wenn nötig
+                    // Text in Chunks aufteilen wenn nÃ¶tig
                     const chunks = splitIntoChunks(body.text, 2000);
-                    console.log(\`Text split into \${chunks.length} chunk(s)\`);
+                    console.log(`Text split into ${chunks.length} chunk(s)`);
 
                     const translatedChunks = [];
                     
-                    // Jeden Chunk übersetzen
+                    // Jeden Chunk Ã¼bersetzen
                     for (let i = 0; i < chunks.length; i++) {
-                        console.log(\`Translating chunk \${i + 1}/\${chunks.length} (\${chunks[i].length} chars)\`);
+                        console.log(`Translating chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)`);
                         
                         const translated = await translateChunk(chunks[i], fromLang, targetLang, accessToken);
                         translatedChunks.push(translated);
                     }
 
-                    // Chunks wieder zusammenfügen
-                    const finalTranslation = translatedChunks.join('\\n\\n');
+                    // Chunks wieder zusammenfÃ¼gen
+                    const finalTranslation = translatedChunks.join('\n\n');
 
                     const duration = Date.now() - startTime;
-                    console.log(\`Success: translated \${chunks.length} chunk(s) in \${duration}ms\`);
+                    console.log(`Success: translated ${chunks.length} chunk(s) in ${duration}ms`);
 
                     return Response.json({
                         success: true,
@@ -578,7 +578,7 @@ export default {
                     console.error('Translation error:', fetchError);
                     return Response.json({
                         success: false,
-                        error: 'Übersetzungsfehler',
+                        error: 'Ãœbersetzungsfehler',
                         detail: fetchError.message
                     }, { status: 500, headers: corsHeaders });
                 }
