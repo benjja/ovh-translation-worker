@@ -1,6 +1,7 @@
 /**
  * Cloudflare Worker: OVH Translation API Wrapper
- * Version 1.2 - Mobile-Optimized with UI Debugging
+ * Version 1.4 - Chunking Support für lange Texte
+ * Mit Basic Auth und eingebettetem HTML-Frontend
  */
 
 const HTML_PAGE = `<!DOCTYPE html>
@@ -8,7 +9,7 @@ const HTML_PAGE = `<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ðŸŒ Ãœbersetzungs-Tool</title>
+    <title>🌍 Übersetzungs-Tool</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -57,7 +58,9 @@ const HTML_PAGE = `<!DOCTYPE html>
             cursor: pointer;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
+            transition: all 0.2s;
         }
+        .button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4); }
         .button:active:not(:disabled) { transform: scale(0.98); }
         .button:disabled { opacity: 0.6; cursor: not-allowed; }
         .language-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -71,7 +74,7 @@ const HTML_PAGE = `<!DOCTYPE html>
         .result-box.error { background: #fff5f5; border-left: 4px solid #e53e3e; }
         .result-box.info { background: #fffbeb; border-left: 4px solid #f59e0b; }
         .result-box h3 { margin-bottom: 10px; font-size: 15px; color: #333; }
-        .result-text { color: #555; line-height: 1.6; font-size: 14px; word-wrap: break-word; }
+        .result-text { color: #555; line-height: 1.6; font-size: 14px; word-wrap: break-word; white-space: pre-wrap; }
         .error-text { color: #c53030; font-size: 14px; }
         .debug-section {
             margin-top: 10px;
@@ -84,7 +87,7 @@ const HTML_PAGE = `<!DOCTYPE html>
             max-height: 200px;
             overflow-y: auto;
         }
-        .debug-section summary { cursor: pointer; font-weight: 600; margin-bottom: 5px; }
+        .debug-section summary { cursor: pointer; font-weight: 600; margin-bottom: 5px; user-select: none; }
         .hidden { display: none; }
         @keyframes slideIn {
             from { opacity: 0; transform: translateY(-10px); }
@@ -99,31 +102,38 @@ const HTML_PAGE = `<!DOCTYPE html>
             border-top-color: white;
             animation: spin 0.8s linear infinite;
             margin-left: 8px;
+            vertical-align: middle;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
+        .progress-container {
+            margin-top: 10px;
+        }
         .progress-bar {
             width: 100%;
-            height: 4px;
+            height: 6px;
             background: #e0e0e0;
-            border-radius: 2px;
+            border-radius: 3px;
             overflow: hidden;
-            margin-top: 10px;
+            margin-top: 8px;
         }
         .progress-fill {
             height: 100%;
             background: linear-gradient(90deg, #667eea, #764ba2);
-            animation: progress 2s ease-in-out infinite;
+            transition: width 0.3s ease;
+            width: 0%;
         }
-        @keyframes progress {
-            0%, 100% { width: 0%; }
-            50% { width: 100%; }
+        .progress-text {
+            font-size: 13px;
+            color: #666;
+            margin-top: 6px;
+            text-align: center;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>ðŸŒ Ãœbersetzungs-Tool</h1>
-        <p class="subtitle">KI-gestÃ¼tzte Ãœbersetzung mit OVH AI</p>
+        <h1>🌍 Übersetzungs-Tool</h1>
+        <p class="subtitle">KI-gestützte Übersetzung mit OVH AI • Unterstützt lange Texte</p>
 
         <div class="language-row">
             <div class="form-group">
@@ -131,14 +141,14 @@ const HTML_PAGE = `<!DOCTYPE html>
                 <select id="fromLang">
                     <option value="English">Englisch</option>
                     <option value="German">Deutsch</option>
-                    <option value="French">FranzÃ¶sisch</option>
+                    <option value="French">Französisch</option>
                     <option value="Spanish">Spanisch</option>
                 </select>
             </div>
             <div class="form-group">
                 <label for="toLang">Zu Sprache</label>
                 <select id="toLang">
-                    <option value="French">FranzÃ¶sisch</option>
+                    <option value="French">Französisch</option>
                     <option value="German">Deutsch</option>
                     <option value="English">Englisch</option>
                     <option value="Spanish">Spanisch</option>
@@ -147,21 +157,24 @@ const HTML_PAGE = `<!DOCTYPE html>
         </div>
 
         <div class="form-group">
-            <label for="textInput">Text zum Ãœbersetzen</label>
+            <label for="textInput">Text zum Übersetzen</label>
             <textarea id="textInput" placeholder="Gib hier deinen Text ein...">Brian is in the kitchen</textarea>
             <div class="char-counter" id="charCounter">0 Zeichen</div>
         </div>
 
-        <button type="button" class="button" id="translateBtn">Ãœbersetzen</button>
+        <button type="button" class="button" id="translateBtn">Übersetzen</button>
 
-        <div id="progressBar" class="hidden">
-            <div class="progress-bar"><div class="progress-fill"></div></div>
+        <div id="progressContainer" class="progress-container hidden">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-text" id="progressText">Wird übersetzt...</div>
         </div>
 
         <div id="result" class="hidden"></div>
         
         <div id="debugLog" class="result-box info hidden">
-            <h3>ðŸ” Debug-Log</h3>
+            <h3>🔍 Debug-Log</h3>
             <details class="debug-section">
                 <summary>Klicken zum Anzeigen</summary>
                 <div id="debugContent"></div>
@@ -194,16 +207,23 @@ const HTML_PAGE = `<!DOCTYPE html>
             const counter = document.getElementById('charCounter');
             const length = text.length;
             counter.textContent = length + ' Zeichen';
-            if (length > 1000) {
+            if (length > 5000) {
                 counter.classList.add('warning');
-                counter.textContent += ' âš ï¸ Sehr lang';
+                counter.textContent += ' ⚠️ Sehr lang (wird in Teilen übersetzt)';
             } else {
                 counter.classList.remove('warning');
             }
         }
 
+        function updateProgress(percent, text) {
+            const fill = document.getElementById('progressFill');
+            const progressText = document.getElementById('progressText');
+            fill.style.width = percent + '%';
+            if (text) progressText.textContent = text;
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
-            log('Seite geladen');
+            log('✅ Seite geladen');
             const btn = document.getElementById('translateBtn');
             const textInput = document.getElementById('textInput');
             if (btn) {
@@ -217,99 +237,87 @@ const HTML_PAGE = `<!DOCTYPE html>
         });
 
         async function translate() {
-            log('Ãœbersetzung gestartet');
+            log('🔄 Übersetzung gestartet');
             const btn = document.getElementById('translateBtn');
             const result = document.getElementById('result');
-            const progressBar = document.getElementById('progressBar');
+            const progressContainer = document.getElementById('progressContainer');
             const text = document.getElementById('textInput').value;
             const fromLang = document.getElementById('fromLang').value;
             const toLang = document.getElementById('toLang').value;
 
-            log('Text-LÃ¤nge: ' + text.length + ' Zeichen');
-            log('Von: ' + fromLang + ' zu ' + toLang);
+            log('Text-Länge: ' + text.length + ' Zeichen');
+            log('Von: ' + fromLang + ' → ' + toLang);
 
             result.classList.add('hidden');
-            progressBar.classList.remove('hidden');
+            progressContainer.classList.remove('hidden');
+            updateProgress(0, 'Wird vorbereitet...');
 
             if (!text.trim()) {
-                log('Kein Text eingegeben');
+                log('❌ Kein Text eingegeben');
                 showResult('Bitte gib einen Text ein', 'error');
-                progressBar.classList.add('hidden');
+                progressContainer.classList.add('hidden');
                 return;
             }
 
-            if (text.length > 2000) {
-                showResult('Text ist sehr lang (' + text.length + ' Zeichen). Bitte warten...', 'info');
-            }
-
             btn.disabled = true;
-            btn.innerHTML = 'Wird Ã¼bersetzt...<span class="spinner"></span>';
+            btn.innerHTML = 'Wird übersetzt...<span class="spinner"></span>';
             const startTime = Date.now();
 
             try {
-                log('Sende Request an /api/translate');
-                const timeoutMs = text.length > 1000 ? 60000 : 30000;
-                const controller = new AbortController();
-                const timeoutId = setTimeout(function() {
-                    controller.abort();
-                    log('Timeout erreicht');
-                }, timeoutMs);
-
+                log('📤 Sende Request an /api/translate');
+                
                 const response = await fetch('/api/translate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: text, from: fromLang, target: toLang }),
-                    signal: controller.signal
+                    body: JSON.stringify({ text: text, from: fromLang, target: toLang })
                 });
 
-                clearTimeout(timeoutId);
                 const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-                log('Response erhalten (HTTP ' + response.status + ') nach ' + duration + 's');
+                log('📥 Response erhalten (HTTP ' + response.status + ') nach ' + duration + 's');
 
                 let data;
                 try {
                     data = await response.json();
-                    log('JSON erfolgreich geparst');
+                    log('✅ JSON erfolgreich geparst');
                 } catch (parseError) {
-                    log('JSON-Parse-Fehler: ' + parseError.message);
-                    throw new Error('Server hat ungÃ¼ltiges JSON zurÃ¼ckgegeben');
+                    log('❌ JSON-Parse-Fehler: ' + parseError.message);
+                    throw new Error('Server hat ungültiges JSON zurückgegeben');
                 }
 
                 if (response.ok && data.success) {
-                    log('Ãœbersetzung erfolgreich');
+                    log('✅ Übersetzung erfolgreich');
+                    if (data.chunked) {
+                        log('ℹ️ Text wurde in ' + data.chunks + ' Teile aufgeteilt');
+                    }
                     showResult(data.translated, 'success');
                 } else {
-                    log('Ãœbersetzung fehlgeschlagen: ' + (data.error || 'Unbekannt'));
-                    const errorMsg = data.error || data.detail || 'Ãœbersetzung fehlgeschlagen';
+                    log('❌ Übersetzung fehlgeschlagen: ' + (data.error || 'Unbekannt'));
+                    const errorMsg = data.error || data.detail || 'Übersetzung fehlgeschlagen';
                     showResult(errorMsg + '<br><br>Status: ' + response.status, 'error');
                 }
             } catch (error) {
                 const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-                log('Exception nach ' + duration + 's: ' + error.message);
-                let errorMsg = 'Fehler: ' + error.message;
-                if (error.name === 'AbortError') {
-                    errorMsg = 'ZeitÃ¼berschreitung! Die Ãœbersetzung hat zu lange gedauert.<br><br>Tipp: Versuche einen kÃ¼rzeren Text.';
-                }
-                showResult(errorMsg, 'error');
+                log('❌ Exception nach ' + duration + 's: ' + error.message);
+                showResult('Fehler: ' + error.message, 'error');
             } finally {
-                progressBar.classList.add('hidden');
+                progressContainer.classList.add('hidden');
                 btn.disabled = false;
-                btn.innerHTML = 'Ãœbersetzen';
-                log('Fertig');
+                btn.innerHTML = 'Übersetzen';
+                log('✔️ Fertig');
             }
         }
 
         function showResult(text, type) {
             const result = document.getElementById('result');
-            let icon = 'âœ“';
-            let title = 'Ãœbersetzung';
+            let icon = '✓';
+            let title = 'Übersetzung';
             let textClass = 'result-text';
             if (type === 'error') {
-                icon = 'âŒ';
+                icon = '❌';
                 title = 'Fehler';
                 textClass = 'error-text';
             } else if (type === 'info') {
-                icon = 'â„¹ï¸';
+                icon = 'ℹ️';
                 title = 'Hinweis';
             }
             result.className = 'result-box ' + type;
@@ -323,181 +331,270 @@ const HTML_PAGE = `<!DOCTYPE html>
 </body>
 </html>`;
 
-export default {
-  async fetch(request, env, ctx) {
-    const corsHeaders = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+// Hilfsfunktion: Text in sinnvolle Chunks aufteilen
+function splitIntoChunks(text, maxChunkSize = 2000) {
+    const chunks = [];
+    
+    // Wenn Text klein genug ist, direkt zurückgeben
+    if (text.length <= maxChunkSize) {
+        return [text];
+    }
+
+    // Text nach Absätzen aufteilen
+    const paragraphs = text.split(/\n\n+/);
+    
+    let currentChunk = '';
+    
+    for (const paragraph of paragraphs) {
+        // Wenn der Absatz selbst zu groß ist, nach Sätzen aufteilen
+        if (paragraph.length > maxChunkSize) {
+            // Aktuellen Chunk speichern, falls vorhanden
+            if (currentChunk) {
+                chunks.push(currentChunk.trim());
+                currentChunk = '';
+            }
+            
+            // Absatz nach Sätzen aufteilen
+            const sentences = paragraph.split(/([.!?]+\s+)/);
+            
+            for (const sentence of sentences) {
+                if (currentChunk.length + sentence.length <= maxChunkSize) {
+                    currentChunk += sentence;
+                } else {
+                    if (currentChunk) {
+                        chunks.push(currentChunk.trim());
+                    }
+                    currentChunk = sentence;
+                }
+            }
+        } else {
+            // Prüfen, ob Absatz in aktuellen Chunk passt
+            if (currentChunk.length + paragraph.length + 2 <= maxChunkSize) {
+                currentChunk += (currentChunk ? '\n\n' : '') + paragraph;
+            } else {
+                if (currentChunk) {
+                    chunks.push(currentChunk.trim());
+                }
+                currentChunk = paragraph;
+            }
+        }
+    }
+    
+    // Letzten Chunk hinzufügen
+    if (currentChunk) {
+        chunks.push(currentChunk.trim());
+    }
+    
+    return chunks;
+}
+
+// Einzelnen Chunk übersetzen
+async function translateChunk(chunk, fromLang, targetLang, ovhToken) {
+    const ovhUrl = `https://t5-large.endpoints.kepler.ai.cloud.ovh.net/api/translate?from=${encodeURIComponent(fromLang)}&target=${encodeURIComponent(targetLang)}`;
+    
+    const ovhHeaders = {
+        'Content-Type': 'text/plain; charset=utf-8'
     };
 
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: corsHeaders });
+    if (ovhToken) {
+        ovhHeaders['Authorization'] = `Bearer ${ovhToken}`;
     }
 
-    // Basic Auth
-    if (env.BASIC_AUTH_USERNAME && env.BASIC_AUTH_PASSWORD) {
-      const authHeader = request.headers.get('Authorization');
-      if (!authHeader || !authHeader.startsWith('Basic ')) {
-        return new Response(JSON.stringify({
-          error: 'Authentication Required',
-          detail: 'Please provide valid credentials'
-        }), {
-          status: 401,
-          headers: {
-            ...corsHeaders,
-            'WWW-Authenticate': 'Basic realm="Translation API", charset="UTF-8"',
-            'Content-Type': 'application/json'
-          }
-        });
-      }
+    const response = await fetch(ovhUrl, {
+        method: 'POST',
+        headers: ovhHeaders,
+        body: chunk
+    });
 
-      try {
-        const base64Credentials = authHeader.substring(6);
-        const credentials = atob(base64Credentials);
-        const [username, password] = credentials.split(':');
-        if (username !== env.BASIC_AUTH_USERNAME || password !== env.BASIC_AUTH_PASSWORD) {
-          return new Response(JSON.stringify({
-            error: 'Invalid Credentials'
-          }), {
-            status: 401,
-            headers: {
-              ...corsHeaders,
-              'WWW-Authenticate': 'Basic realm="Translation API", charset="UTF-8"',
-              'Content-Type': 'application/json'
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`OVH API Error (HTTP ${response.status}): ${errorText}`);
+    }
+
+    return await response.text();
+}
+
+export default {
+    async fetch(request, env, ctx) {
+        const corsHeaders = {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+        };
+
+        // CORS Preflight
+        if (request.method === 'OPTIONS') {
+            return new Response(null, { status: 204, headers: corsHeaders });
+        }
+
+        // Basic Auth Check (optional)
+        if (env.BASIC_AUTH_USERNAME && env.BASIC_AUTH_PASSWORD) {
+            const authHeader = request.headers.get('Authorization');
+            
+            if (!authHeader || !authHeader.startsWith('Basic ')) {
+                return new Response(JSON.stringify({
+                    error: 'Authentication Required',
+                    detail: 'Please provide valid credentials'
+                }), {
+                    status: 401,
+                    headers: {
+                        ...corsHeaders,
+                        'WWW-Authenticate': 'Basic realm="Translation API", charset="UTF-8"',
+                        'Content-Type': 'application/json'
+                    }
+                });
             }
-          });
-        }
-        console.log('Auth successful for:', username);
-      } catch (error) {
-        return new Response(JSON.stringify({
-          error: 'Invalid Authorization Header'
-        }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      }
-    }
 
-    const url = new URL(request.url);
+            try {
+                const base64Credentials = authHeader.substring(6);
+                const credentials = atob(base64Credentials);
+                const [username, password] = credentials.split(':');
 
-    try {
-      // Frontend
-      if (url.pathname === '/' && request.method === 'GET') {
-        return new Response(HTML_PAGE, {
-          headers: {
-            'Content-Type': 'text/html;charset=UTF-8',
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-          }
-        });
-      }
+                if (username !== env.BASIC_AUTH_USERNAME || password !== env.BASIC_AUTH_PASSWORD) {
+                    return new Response(JSON.stringify({
+                        error: 'Invalid Credentials'
+                    }), {
+                        status: 401,
+                        headers: {
+                            ...corsHeaders,
+                            'WWW-Authenticate': 'Basic realm="Translation API", charset="UTF-8"',
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                }
 
-      // Health check
-      if (url.pathname === '/health' || url.pathname === '/api/health') {
-        return Response.json({
-          status: 'ok',
-          message: 'Translation API is running',
-          version: '1.2.0',
-          env: {
-            hasOvhToken: !!env.OVH_AI_ENDPOINTS_ACCESS_TOKEN,
-            authEnabled: !!(env.BASIC_AUTH_USERNAME && env.BASIC_AUTH_PASSWORD)
-          }
-        }, { headers: corsHeaders });
-      }
-
-      // Translation API
-      if (url.pathname === '/api/translate' && request.method === 'POST') {
-        const startTime = Date.now();
-        let body;
-        try {
-          body = await request.json();
-        } catch (parseError) {
-          console.error('Parse error:', parseError);
-          return Response.json({
-            success: false,
-            error: 'Invalid JSON'
-          }, { status: 400, headers: corsHeaders });
+                console.log('Auth successful for:', username);
+            } catch (error) {
+                return new Response(JSON.stringify({
+                    error: 'Invalid Authorization Header'
+                }), {
+                    status: 400,
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                });
+            }
         }
 
-        console.log('Translation request:', { textLength: body.text?.length, from: body.from, target: body.target });
-
-        if (!body.text || body.text.trim().length === 0) {
-          return Response.json({
-            success: false,
-            error: 'Text ist erforderlich'
-          }, { status: 400, headers: corsHeaders });
-        }
-
-        const fromLang = body.from || 'English';
-        const targetLang = body.target || 'French';
-        const ovhUrl = 'https://t5-large.endpoints.kepler.ai.cloud.ovh.net/api/translate?from=' + encodeURIComponent(fromLang) + '&target=' + encodeURIComponent(targetLang);
-        const ovhHeaders = { 'Content-Type': 'text/plain' };
-        const accessToken = env.OVH_AI_ENDPOINTS_ACCESS_TOKEN || env.OVH_API_KEY;
-        
-        if (accessToken) {
-          ovhHeaders['Authorization'] = 'Bearer ' + accessToken;
-        } else {
-          console.warn('No OVH token configured');
-          return Response.json({
-            success: false,
-            error: 'API nicht konfiguriert',
-            detail: 'OVH_AI_ENDPOINTS_ACCESS_TOKEN fehlt'
-          }, { status: 500, headers: corsHeaders });
-        }
-
-        console.log('Calling OVH API...');
+        const url = new URL(request.url);
 
         try {
-          const ovhResponse = await fetch(ovhUrl, {
-            method: 'POST',
-            headers: ovhHeaders,
-            body: body.text
-          });
+            // Frontend HTML
+            if (url.pathname === '/' && request.method === 'GET') {
+                return new Response(HTML_PAGE, {
+                    headers: {
+                        'Content-Type': 'text/html;charset=UTF-8',
+                        'Cache-Control': 'no-cache, no-store, must-revalidate'
+                    }
+                });
+            }
 
-          const duration = Date.now() - startTime;
-          console.log('OVH responded:', ovhResponse.status, duration + 'ms');
+            // Health Check
+            if (url.pathname === '/health' || url.pathname === '/api/health') {
+                return Response.json({
+                    status: 'ok',
+                    message: 'Translation API is running',
+                    version: '1.4.0',
+                    features: ['chunking', 'long-text-support'],
+                    env: {
+                        hasOvhToken: !!env.OVH_AI_ENDPOINTS_ACCESS_TOKEN,
+                        authEnabled: !!(env.BASIC_AUTH_USERNAME && env.BASIC_AUTH_PASSWORD)
+                    }
+                }, { headers: corsHeaders });
+            }
 
-          if (!ovhResponse.ok) {
-            const errorText = await ovhResponse.text();
-            console.error('OVH error:', ovhResponse.status, errorText.substring(0, 200));
+            // Translation API
+            if (url.pathname === '/api/translate' && request.method === 'POST') {
+                const startTime = Date.now();
+                
+                let body;
+                try {
+                    body = await request.json();
+                } catch (parseError) {
+                    console.error('Parse error:', parseError);
+                    return Response.json({
+                        success: false,
+                        error: 'Invalid JSON'
+                    }, { status: 400, headers: corsHeaders });
+                }
+
+                console.log('Translation request:', { 
+                    textLength: body.text?.length, 
+                    from: body.from, 
+                    target: body.target 
+                });
+
+                if (!body.text || body.text.trim().length === 0) {
+                    return Response.json({
+                        success: false,
+                        error: 'Text ist erforderlich'
+                    }, { status: 400, headers: corsHeaders });
+                }
+
+                const fromLang = body.from || 'English';
+                const targetLang = body.target || 'French';
+
+                const accessToken = env.OVH_AI_ENDPOINTS_ACCESS_TOKEN || env.OVH_API_KEY;
+                if (!accessToken) {
+                    console.warn('No OVH token configured');
+                    return Response.json({
+                        success: false,
+                        error: 'API nicht konfiguriert',
+                        detail: 'OVH_AI_ENDPOINTS_ACCESS_TOKEN fehlt'
+                    }, { status: 500, headers: corsHeaders });
+                }
+
+                try {
+                    // Text in Chunks aufteilen wenn nötig
+                    const chunks = splitIntoChunks(body.text, 2000);
+                    console.log(\`Text split into \${chunks.length} chunk(s)\`);
+
+                    const translatedChunks = [];
+                    
+                    // Jeden Chunk übersetzen
+                    for (let i = 0; i < chunks.length; i++) {
+                        console.log(\`Translating chunk \${i + 1}/\${chunks.length} (\${chunks[i].length} chars)\`);
+                        
+                        const translated = await translateChunk(chunks[i], fromLang, targetLang, accessToken);
+                        translatedChunks.push(translated);
+                    }
+
+                    // Chunks wieder zusammenfügen
+                    const finalTranslation = translatedChunks.join('\\n\\n');
+
+                    const duration = Date.now() - startTime;
+                    console.log(\`Success: translated \${chunks.length} chunk(s) in \${duration}ms\`);
+
+                    return Response.json({
+                        success: true,
+                        original: body.text,
+                        translated: finalTranslation,
+                        from: fromLang,
+                        target: targetLang,
+                        chunked: chunks.length > 1,
+                        chunks: chunks.length,
+                        duration_ms: duration
+                    }, { headers: corsHeaders });
+
+                } catch (fetchError) {
+                    console.error('Translation error:', fetchError);
+                    return Response.json({
+                        success: false,
+                        error: 'Übersetzungsfehler',
+                        detail: fetchError.message
+                    }, { status: 500, headers: corsHeaders });
+                }
+            }
+
             return Response.json({
-              success: false,
-              error: 'OVH API Fehler (HTTP ' + ovhResponse.status + ')',
-              detail: errorText
-            }, { status: ovhResponse.status, headers: corsHeaders });
-          }
+                error: 'Not Found'
+            }, { status: 404, headers: corsHeaders });
 
-          const translatedText = await ovhResponse.text();
-          console.log('Success:', duration + 'ms');
-
-          return Response.json({
-            success: true,
-            original: body.text,
-            translated: translatedText,
-            from: fromLang,
-            target: targetLang
-          }, { headers: corsHeaders });
-        } catch (fetchError) {
-          console.error('Fetch error:', fetchError);
-          return Response.json({
-            success: false,
-            error: 'Verbindungsfehler zur OVH API',
-            detail: fetchError.message
-          }, { status: 500, headers: corsHeaders });
+        } catch (error) {
+            console.error('Error:', error);
+            return Response.json({
+                success: false,
+                error: 'Internal Server Error',
+                detail: error instanceof Error ? error.message : 'Unknown error'
+            }, { status: 500, headers: corsHeaders });
         }
-      }
-
-      return Response.json({
-        error: 'Not Found'
-      }, { status: 404, headers: corsHeaders });
-
-    } catch (error) {
-      console.error('Error:', error);
-      return Response.json({
-        success: false,
-        error: 'Internal Server Error',
-        detail: error instanceof Error ? error.message : 'Unknown error'
-      }, { status: 500, headers: corsHeaders });
     }
-  }
 };
